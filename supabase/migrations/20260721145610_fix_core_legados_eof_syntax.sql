@@ -1,4 +1,6 @@
-#!/bin/bash
+-- Sync corrected core_legados.sh (fixed EOF/IFS syntax error, execution_order=5)
+UPDATE scripts SET
+    content = $$#!/bin/bash
 # ============================================================================
 # Core Script: core_legados.sh
 # SeederLinux Lite - Java 8, Firefox 52.7 ESR (sistemas legados)
@@ -19,9 +21,6 @@ echo "============================================================"
 echo "05 - Configurar sistemas legados (Java 8, Firefox 52.7)"
 echo "============================================================"
 
-# ============================================================
-# Variaveis
-# ============================================================
 INSTALL_JAVA8="{{INSTALL_JAVA8}}"
 INSTALL_FIREFOX52="{{INSTALL_FIREFOX52}}"
 BASE_URL="{{BASE_URL}}"
@@ -34,9 +33,6 @@ echo ">>> Instalar Java 8: $INSTALL_JAVA8"
 echo ">>> Instalar Firefox 52.7: $INSTALL_FIREFOX52"
 echo ">>> Excecoes Java: ${JAVA_EXCEPTIONS:-nenhuma}"
 
-# ============================================================
-# Verificar se pelo menos um toggle esta ativo
-# ============================================================
 if [ "$INSTALL_JAVA8" != "true" ] && [ "$INSTALL_FIREFOX52" != "true" ]; then
     echo ">>> Sistemas legados desativados. Pulando."
     echo ">>> [05] Sistemas legados nao instalados (desativado)."
@@ -46,15 +42,11 @@ fi
 
 export DEBIAN_FRONTEND=noninteractive
 
-# Configurar proxy para downloads
 if [ "$PROXY_MODE" = "MANUAL" ] && [ -n "$PROXY_HTTP" ] && [ "$PROXY_HTTP" != "" ]; then
     export http_proxy="http://${PROXY_HTTP}:${PROXY_PORTA}"
     export https_proxy="http://${PROXY_HTTP}:${PROXY_PORTA}"
 fi
 
-# ============================================================
-# Java 8 (OpenJDK 8) - apenas se INSTALL_JAVA8=true
-# ============================================================
 if [ "$INSTALL_JAVA8" = "true" ]; then
     echo ">>> Instalando Java 8 (OpenJDK 8)..."
 
@@ -79,7 +71,6 @@ if [ "$INSTALL_JAVA8" = "true" ]; then
         fi
     fi
 
-    # Configurar excecoes Java (deployment.properties) se fornecidas
     if [ -n "$JAVA_EXCEPTIONS" ] && [ "$JAVA_EXCEPTIONS" != "" ]; then
         echo ">>> Configurando excecoes Java..."
         DEPLOY_DIR="/usr/lib/jvm/.deployment"
@@ -110,9 +101,6 @@ else
     echo ">>> Java 8 desativado (INSTALL_JAVA8=false). Pulando."
 fi
 
-# ============================================================
-# Firefox 52.7 ESR (para applets Java) - apenas se INSTALL_FIREFOX52=true
-# ============================================================
 if [ "$INSTALL_FIREFOX52" = "true" ]; then
     echo ">>> Instalando Firefox 52.7 ESR..."
 
@@ -179,3 +167,7 @@ fi
 
 echo ">>> [05] Sistemas legados configurados!"
 echo "============================================================"
+$$,
+    execution_order = 5,
+    updated_at = NOW()
+WHERE filename = 'core_legados.sh' AND is_core = TRUE;
