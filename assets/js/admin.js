@@ -1631,6 +1631,33 @@ function closeModal(id) {
 }
 window.closeModal = closeModal;
 
+// ============ BUNDLE ACTIONS ============
+
+async function editBundleDesc(bundleId) {
+    const newDesc = prompt('Nova descrição do bundle:');
+    if (newDesc === null) return;
+    const res = await API.put('bundle', { id: bundleId, description: newDesc });
+    if (res.success) {
+        Toast.success('Descrição atualizada');
+        if (currentOrgId) loadBundles(currentOrgId);
+    } else {
+        Toast.error(res.error || 'Erro');
+    }
+}
+window.editBundleDesc = editBundleDesc;
+
+async function deleteBundle(bundleId) {
+    if (!confirm('Tem certeza que deseja excluir este bundle?')) return;
+    const res = await API.del('bundle', { id: bundleId });
+    if (res.success) {
+        Toast.success('Bundle excluído');
+        if (currentOrgId) loadBundles(currentOrgId);
+    } else {
+        Toast.error(res.error || 'Erro');
+    }
+}
+window.deleteBundle = deleteBundle;
+
 // ============ EVENT LISTENERS ============
 
 function setupEventListeners() {
@@ -1668,3 +1695,5 @@ function setupEventListeners() {
         if (e.key === 'Escape') document.querySelectorAll('.modal:not(.hidden)').forEach(m => m.classList.add('hidden'));
     });
 }
+
+setupEventListeners();
