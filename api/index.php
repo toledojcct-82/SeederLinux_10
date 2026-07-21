@@ -116,6 +116,14 @@ try {
             if ($method !== 'POST') jsonError('Method not allowed', 405);
             handleToggleBundleActive($input);
             break;
+        case 'bundle':
+            if ($_SERVER['REQUEST_METHOD'] === 'DELETE') {
+                $bundleId = (int)($input['id'] ?? 0);
+                handleDeleteBundle($bundleId);
+            } elseif ($_SERVER['REQUEST_METHOD'] === 'PUT') {
+                handleUpdateBundleDescription($input);
+            }
+            break;
 
         // Users
         case 'users':
