@@ -1454,7 +1454,8 @@ function handleToggleBundleActive($input) {
         jsonError('Sem permissao', 403);
     }
 
-    $newStatus = !$bundle['is_active'];
+    $currentStatus = $bundle['is_active'] ?? false;
+    $newStatus = $currentStatus ? 'false' : 'true';
     Database::execute("UPDATE deploy_bundles SET is_active = ? WHERE id = ?", [$newStatus, $bundleId]);
 
     log_audit($newStatus ? 'ACTIVATE' : 'DEACTIVATE', 'bundles', $bundleId, []);
