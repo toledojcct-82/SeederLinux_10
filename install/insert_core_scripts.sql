@@ -4372,3 +4372,7 @@ $SeederScript$,
     is_active = EXCLUDED.is_active,
     updated_at = CURRENT_TIMESTAMP;
 
+-- Eliminar placeholders residuais que impedem a geracao de bundles
+UPDATE scripts SET content = replace(content, '{{VARIAVEL}}', 'VARIAVEL');
+UPDATE scripts SET content = replace(content, '{{INSTALL_APPS}}', 'true');
+UPDATE scripts SET content = replace(content, '{{INSTALL_LEGADOS}}', 'false');
