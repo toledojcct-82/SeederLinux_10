@@ -1636,7 +1636,7 @@ window.closeModal = closeModal;
 async function editBundleDesc(bundleId) {
     const newDesc = prompt('Nova descrição do bundle:');
     if (newDesc === null) return;
-    const res = await API.put('bundle', { id: bundleId, description: newDesc });
+    const res = await API.put('bundle', { description: newDesc }, { id: bundleId });
     if (res.success) {
         Toast.success('Descrição atualizada');
         if (currentOrgId) loadBundles(currentOrgId);
@@ -1648,7 +1648,7 @@ window.editBundleDesc = editBundleDesc;
 
 async function deleteBundle(bundleId) {
     if (!confirm('Tem certeza que deseja excluir este bundle?')) return;
-    const res = await API.del('bundle', { id: bundleId });
+    const res = await API.delete('bundle', null, { id: bundleId });
     if (res.success) {
         Toast.success('Bundle excluído');
         if (currentOrgId) loadBundles(currentOrgId);
