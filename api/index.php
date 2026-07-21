@@ -738,7 +738,7 @@ function handleGenerateBundle($input) {
         );
     } else {
         $placeholders = implode(',', array_fill(0, count($selectedScripts), '?'));
-        $params = array_merge([$orgId], $selectedScripts);
+        $params = $selectedScripts;
         $scripts = Database::fetchAll(
             "SELECT id, name, filename, content, is_core FROM scripts
              WHERE is_active = TRUE AND (is_core = TRUE OR id IN ($placeholders))
