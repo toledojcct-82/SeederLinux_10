@@ -1,4 +1,9 @@
-#!/bin/bash
+INSERT INTO scripts (name, filename, description, content, is_core, is_active, execution_order, version, organization_id)
+VALUES (
+    'Suporte a Sistemas Legados',
+    'core_legados.sh',
+    'Instala Java 8 e Firefox 52 ESR para compatibilidade com sistemas legados.',
+    $SeederScript$#!/bin/bash
 # ============================================================================
 # Core Script: core_legados.sh
 # SeederLinux Lite - Java 8, Firefox 52.7 ESR (sistemas legados)
@@ -13,6 +18,7 @@
 # Executado ANTES de core_domain.sh para evitar erro 407 de proxy.
 # ============================================================================
 
+(
 set -e
 
 echo "============================================================"
@@ -179,3 +185,18 @@ fi
 
 echo ">>> [05] Sistemas legados configurados!"
 echo "============================================================"
+)
+$SeederScript$,
+    TRUE,
+    TRUE,
+    4,
+    1,
+    NULL
+) ON CONFLICT (filename) DO UPDATE SET
+    name = EXCLUDED.name,
+    description = EXCLUDED.description,
+    content = EXCLUDED.content,
+    execution_order = EXCLUDED.execution_order,
+    version = EXCLUDED.version,
+    is_active = EXCLUDED.is_active,
+    updated_at = CURRENT_TIMESTAMP;

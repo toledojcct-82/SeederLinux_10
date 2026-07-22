@@ -1394,6 +1394,8 @@ async function loadBundles(orgId) {
                 <td class="px-4 py-3 text-right">
                     <button data-testid="bundle-download-${b.id}" onclick="downloadBundle(${b.id})" class="text-blue-400 hover:text-blue-300 text-sm mr-2">Download</button>
                     <button data-testid="bundle-toggle-${b.id}" onclick="toggleBundleActive(${b.id})" class="text-amber-400 hover:text-amber-300 text-sm">${b.is_active ? 'Desativar' : 'Ativar'}</button>
+                    <button data-testid="bundle-edit-${b.id}" onclick="editBundleDesc(${b.id})" class="text-blue-400 hover:text-blue-300 text-sm ml-2">Editar</button>
+<button data-testid="bundle-delete-${b.id}" onclick="deleteBundle(${b.id})" class="text-red-400 hover:text-red-300 text-sm ml-2">Excluir</button>
                 </td>
             </tr>`;
     }).join('');
@@ -1629,6 +1631,33 @@ function closeModal(id) {
 }
 window.closeModal = closeModal;
 
+// ============ BUNDLE ACTIONS ============
+
+async function editBundleDesc(bundleId) {
+    const newDesc = prompt('Nova descrição do bundle:');
+    if (newDesc === null) return;
+    const res = await API.put(`bundle&id=${bundleId}`, { description: newDesc });
+    if (res.success) {
+        Toast.success('Descrição atualizada');
+        if (currentOrgId) loadBundles(currentOrgId);
+    } else {
+        Toast.error(res.error || 'Erro');
+    }
+}
+window.editBundleDesc = editBundleDesc;
+
+async function deleteBundle(bundleId) {
+    if (!confirm('Tem certeza que deseja excluir este bundle?')) return;
+    const res = await API.delete(`bundle&id=${bundleId}`);
+    if (res.success) {
+        Toast.success('Bundle excluído');
+        if (currentOrgId) loadBundles(currentOrgId);
+    } else {
+        Toast.error(res.error || 'Erro');
+    }
+}
+window.deleteBundle = deleteBundle;
+
 // ============ EVENT LISTENERS ============
 
 function setupEventListeners() {
@@ -1666,3 +1695,5 @@ function setupEventListeners() {
         if (e.key === 'Escape') document.querySelectorAll('.modal:not(.hidden)').forEach(m => m.classList.add('hidden'));
     });
 }
+
+setupEventListeners();

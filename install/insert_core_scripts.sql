@@ -1,21 +1,11 @@
 -- ============================================================================
 -- SeederLinux Lite - Insercao dos Scripts Core
--- ============================================================================
--- Este arquivo popula a tabela 'scripts' com todos os scripts Core.
--- Gerado automaticamente a partir dos arquivos em scripts/core/.
---
--- ESCAPING: Usa dollar-quoting do PostgreSQL ($SeederScript$) para o conteudo
--- dos scripts, eliminando problemas com aspas simples, aspas duplas,
--- backslashes e qualquer outro caractere especial no bash.
+-- Gerado automaticamente. Dollar-quoting $SeederScript$ evita conflitos.
+-- Nova ordem: core_apps/legados ANTES de core_domain (evita erro 407 de proxy).
 -- ============================================================================
 
--- Limpar scripts core existentes (opcional - descomente se necessario)
--- DELETE FROM scripts WHERE is_core = TRUE;
 
-
--- ============================================================================
 -- Configuracao de DNS (ordem 1) - core_dns.sh
--- ============================================================================
 INSERT INTO scripts (name, filename, description, content, is_core, is_active, execution_order, version, organization_id)
 VALUES (
     'Configuracao de DNS',
@@ -164,9 +154,7 @@ $SeederScript$,
     updated_at = CURRENT_TIMESTAMP;
 
 
--- ============================================================================
 -- Configuracao de Repositorios (ordem 2) - core_repositories.sh
--- ============================================================================
 INSERT INTO scripts (name, filename, description, content, is_core, is_active, execution_order, version, organization_id)
 VALUES (
     'Configuracao de Repositorios',
@@ -436,9 +424,7 @@ $SeederScript$,
     updated_at = CURRENT_TIMESTAMP;
 
 
--- ============================================================================
 -- Instalacao de Pacotes (ordem 3) - core_packages.sh
--- ============================================================================
 INSERT INTO scripts (name, filename, description, content, is_core, is_active, execution_order, version, organization_id)
 VALUES (
     'Instalacao de Pacotes',
@@ -757,14 +743,382 @@ $SeederScript$,
     updated_at = CURRENT_TIMESTAMP;
 
 
--- ============================================================================
--- Ingresso em Dominio AD (ordem 4) - core_domain.sh
--- ============================================================================
+-- Instalacao de Aplicacoes Extras (ordem 4) - core_apps.sh
+INSERT INTO scripts (name, filename, description, content, is_core, is_active, execution_order, version, organization_id)
+VALUES (
+    'Instalacao de Aplicacoes Extras',
+    'core_apps.sh',
+    'Instala Chrome, Chromium e OnlyOffice ANTES do ingresso no AD (evita erro 407 de proxy).',
+    $SeederScript$#!/bin/bash
+# ============================================================================
+# Core Script: core_apps.sh
+# SeederLinux Lite - OnlyOffice, Chrome, Firefox ESR
+# ============================================================================
+# Instala aplicativos adicionais: OnlyOffice Desktop Editors, Google Chrome
+# estavel e Firefox ESR.
+# Os placeholders {{VARIAVEL}} são substituídos automaticamente
+# pelo sistema na geração do bundle.
+# ============================================================================
+
+set -e
+
+echo "============================================================"
+echo "10 - Instalar aplicativos (Chrome, OnlyOffice via .deb/wget)"
+echo "============================================================"
+
+# ============================================================
+# Variáveis
+# ============================================================
+INSTALL_ONLYOFFICE="{{INSTALL_ONLYOFFICE}}"
+INSTALL_CHROME="{{INSTALL_CHROME}}"
+INSTALL_CHROMIUM="{{INSTALL_CHROMIUM}}"
+BASE_URL="{{BASE_URL}}"
+PROXY_MODE="{{PROXY_MODE}}"
+PROXY_HTTP="{{PROXY_HTTP}}"
+PROXY_PORTA="{{PROXY_PORTA}}"
+
+echo ">>> Instalar OnlyOffice: $INSTALL_ONLYOFFICE"
+echo ">>> Instalar Chrome: $INSTALL_CHROME"
+echo ">>> Instalar Chromium: $INSTALL_CHROMIUM"
+
+# ============================================================
+# Verificar se pelo menos um toggle esta ativo
+# ============================================================
+if [ "$INSTALL_ONLYOFFICE" != "true" ] && [ "$INSTALL_CHROME" != "true" ] && [ "$INSTALL_CHROMIUM" != "true" ]; then
+    echo ">>> Instalacao de apps desativada. Pulando."
+    echo ">>> [10] Aplicativos nao instalados (desativado)."
+    echo "============================================================"
+    exit 0
+fi
+
+export DEBIAN_FRONTEND=noninteractive
+
+# Configurar proxy para downloads se necessario
+if [ "$PROXY_MODE" = "MANUAL" ] && [ -n "$PROXY_HTTP" ] && [ "$PROXY_HTTP" != "" ]; then
+    export http_proxy="http://${PROXY_HTTP}:${PROXY_PORTA}"
+    export https_proxy="http://${PROXY_HTTP}:${PROXY_PORTA}"
+fi
+
+# ============================================================
+# Google Chrome (instalado via .deb/wget, nao via apt-get)
+# ============================================================
+if [ "$INSTALL_CHROME" = "true" ]; then
+    echo ">>> Instalando Google Chrome..."
+    CHROME_DEB="/tmp/google-chrome-stable.deb"
+
+    # Baixar Chrome
+    if wget -q -O "$CHROME_DEB" "https://dl.google.com/linux/direct/google-chrome-stable_current_amd64.deb"; then
+        apt-get install -y "$CHROME_DEB" || {
+            echo ">>> AVISO: Falha ao instalar Google Chrome. Tentando dependencias..."
+            apt-get install -y -f
+            apt-get install -y "$CHROME_DEB" || {
+                echo ">>> AVISO: Google Chrome nao instalado."
+            }
+        }
+        rm -f "$CHROME_DEB"
+    else
+        echo ">>> AVISO: Nao foi possivel baixar Google Chrome."
+        echo ">>> Verifique conectividade e configuracao de proxy."
+    fi
+else
+    echo ">>> Google Chrome desativado (INSTALL_CHROME=false). Pulando."
+fi
+
+# ============================================================
+# Chromium (via apt-get)
+# ============================================================
+if [ "$INSTALL_CHROMIUM" = "true" ]; then
+    echo ">>> Instalando Chromium..."
+    apt-get install -y chromium 2>/dev/null || apt-get install -y chromium-browser 2>/dev/null || {
+        echo ">>> AVISO: Nao foi possivel instalar Chromium."
+    }
+else
+    echo ">>> Chromium desativado (INSTALL_CHROMIUM=false). Pulando."
+fi
+
+# ============================================================
+# OnlyOffice Desktop Editors
+# ============================================================
+if [ "$INSTALL_ONLYOFFICE" = "true" ]; then
+    echo ">>> Instalando OnlyOffice Desktop Editors..."
+
+# Metodo 1: Via repositorio APT oficial
+ONLYOFFICE_KEY="/tmp/onlyoffice-key.asc"
+ONLYOFFICE_REPO_LIST="/etc/apt/sources.list.d/onlyoffice.list"
+
+# Baixar e adicionar chave GPG
+if wget -q -O "$ONLYOFFICE_KEY" "https://download.onlyoffice.com/GPG-KEY-ONLYOFFICE"; then
+    gpg --dearmor < "$ONLYOFFICE_KEY" > /usr/share/keyrings/onlyoffice-keyring.gpg 2>/dev/null || \
+        apt-key add "$ONLYOFFICE_KEY" 2>/dev/null || true
+
+    cat > "$ONLYOFFICE_REPO_LIST" <<EOF
+deb [signed-by=/usr/share/keyrings/onlyoffice-keyring.gpg] https://download.onlyoffice.com/repo/debian squeeze main
+EOF
+
+    apt-get update
+    apt-get install -y onlyoffice-desktopeditors || {
+        echo ">>> AVISO: Falha ao instalar OnlyOffice via repositorio."
+        echo ">>> Tentando download direto..."
+
+        # Metodo 2: Download direto do .deb
+        ONLYOFFICE_DEB="/tmp/onlyoffice-desktopeditors.deb"
+        if wget -q -O "$ONLYOFFICE_DEB" "https://download.onlyoffice.com/install/desktop/editors/linux/onlyoffice-desktopeditors_amd64.deb"; then
+            apt-get install -y "$ONLYOFFICE_DEB" || {
+                echo ">>> AVISO: Falha ao instalar OnlyOffice via .deb direto."
+            }
+            rm -f "$ONLYOFFICE_DEB"
+        else
+            echo ">>> AVISO: Nao foi possivel baixar OnlyOffice."
+        fi
+    }
+    rm -f "$ONLYOFFICE_KEY"
+else
+    echo ">>> AVISO: Nao foi possivel obter chave do OnlyOffice."
+    echo ">>> Tentando instalar via repositorio Debian..."
+
+    apt-get install -y onlyoffice-desktopeditors 2>/dev/null || {
+            echo ">>> AVISO: OnlyOffice nao disponivel. Instalacao ignorada."
+        }
+    fi
+else
+    echo ">>> OnlyOffice desativado (INSTALL_ONLYOFFICE=false). Pulando."
+fi
+
+# ============================================================
+# Verificar instalacoes
+# ============================================================
+echo ">>> Verificando instalacoes..."
+command -v firefox-esr &> /dev/null && echo ">>> Firefox ESR: OK" || echo ">>> Firefox ESR: NAO INSTALADO"
+command -v google-chrome &> /dev/null && echo ">>> Google Chrome: OK" || echo ">>> Google Chrome: NAO INSTALADO"
+command -v onlyoffice-desktopeditors &> /dev/null && echo ">>> OnlyOffice: OK" || echo ">>> OnlyOffice: NAO INSTALADO"
+
+echo ">>> [10] Aplicativos instalados!"
+echo "============================================================"
+$SeederScript$,
+    TRUE,
+    TRUE,
+    4,
+    1,
+    NULL
+) ON CONFLICT (filename) DO UPDATE SET
+    name = EXCLUDED.name,
+    description = EXCLUDED.description,
+    content = EXCLUDED.content,
+    execution_order = EXCLUDED.execution_order,
+    version = EXCLUDED.version,
+    is_active = EXCLUDED.is_active,
+    updated_at = CURRENT_TIMESTAMP;
+
+
+-- Suporte a Sistemas Legados (ordem 5) - core_legados.sh
+INSERT INTO scripts (name, filename, description, content, is_core, is_active, execution_order, version, organization_id)
+VALUES (
+    'Suporte a Sistemas Legados',
+    'core_legados.sh',
+    'Instala Java 8 e Firefox 52 ESR ANTES do ingresso no AD (evita erro 407 de proxy).',
+    $SeederScript$#!/bin/bash
+# ============================================================================
+# Core Script: core_legados.sh
+# SeederLinux Lite - Java 8, Firefox 52.7 ESR (sistemas legados)
+# ============================================================================
+# Instala Java 8 (OpenJDK) e/ou Firefox 52.7 ESR para compatibilidade
+# com sistemas legados (applets Java, sistemas antigos da intranet).
+# Cada componente e controlado por seu proprio toggle:
+#   INSTALL_JAVA8     - Instalar Java 8?
+#   INSTALL_FIREFOX52 - Instalar Firefox 52.7 ESR?
+# Os placeholders {{VARIAVEL}} sao substituidos automaticamente
+# pelo sistema na geracao do bundle.
+# Executado ANTES de core_domain.sh para evitar erro 407 de proxy.
+# ============================================================================
+
+set -e
+
+echo "============================================================"
+echo "05 - Configurar sistemas legados (Java 8, Firefox 52.7)"
+echo "============================================================"
+
+# ============================================================
+# Variaveis
+# ============================================================
+INSTALL_JAVA8="{{INSTALL_JAVA8}}"
+INSTALL_FIREFOX52="{{INSTALL_FIREFOX52}}"
+BASE_URL="{{BASE_URL}}"
+PROXY_MODE="{{PROXY_MODE}}"
+PROXY_HTTP="{{PROXY_HTTP}}"
+PROXY_PORTA="{{PROXY_PORTA}}"
+JAVA_EXCEPTIONS="{{JAVA_EXCEPTIONS}}"
+
+echo ">>> Instalar Java 8: $INSTALL_JAVA8"
+echo ">>> Instalar Firefox 52.7: $INSTALL_FIREFOX52"
+echo ">>> Excecoes Java: ${JAVA_EXCEPTIONS:-nenhuma}"
+
+# ============================================================
+# Verificar se pelo menos um toggle esta ativo
+# ============================================================
+if [ "$INSTALL_JAVA8" != "true" ] && [ "$INSTALL_FIREFOX52" != "true" ]; then
+    echo ">>> Sistemas legados desativados. Pulando."
+    echo ">>> [05] Sistemas legados nao instalados (desativado)."
+    echo "============================================================"
+    exit 0
+fi
+
+export DEBIAN_FRONTEND=noninteractive
+
+# Configurar proxy para downloads
+if [ "$PROXY_MODE" = "MANUAL" ] && [ -n "$PROXY_HTTP" ] && [ "$PROXY_HTTP" != "" ]; then
+    export http_proxy="http://${PROXY_HTTP}:${PROXY_PORTA}"
+    export https_proxy="http://${PROXY_HTTP}:${PROXY_PORTA}"
+fi
+
+# ============================================================
+# Java 8 (OpenJDK 8) - apenas se INSTALL_JAVA8=true
+# ============================================================
+if [ "$INSTALL_JAVA8" = "true" ]; then
+    echo ">>> Instalando Java 8 (OpenJDK 8)..."
+
+    if command -v java &>/dev/null; then
+        JAVA_VERSION=$(java -version 2>&1 | head -1)
+        echo ">>> Java ja instalado: $JAVA_VERSION"
+    else
+        echo ">>> AVISO: Java 8 nao foi instalado no core_packages.sh."
+        echo ">>> Tentando instalar via repositorio Adoptium/Temurin..."
+
+        if wget -q -O /tmp/adoptium-key.asc "https://packages.adoptium.net/artifactory/api/gpg/key/public" 2>/dev/null; then
+            gpg --dearmor < /tmp/adoptium-key.asc > /usr/share/keyrings/adoptium-keyring.gpg 2>/dev/null || true
+            echo "deb [signed-by=/usr/share/keyrings/adoptium-keyring.gpg] https://packages.adoptium.net/artifactory/deb bookworm main" \
+                > /etc/apt/sources.list.d/adoptium.list
+            apt-get update
+            apt-get install -y temurin-8-jre || {
+                echo ">>> AVISO: Falha ao instalar Java 8 via Adoptium."
+            }
+            rm -f /tmp/adoptium-key.asc
+        else
+            echo ">>> AVISO: Nao foi possivel obter chave do repositorio Java 8."
+        fi
+    fi
+
+    # Configurar excecoes Java (deployment.properties) se fornecidas
+    if [ -n "$JAVA_EXCEPTIONS" ] && [ "$JAVA_EXCEPTIONS" != "" ]; then
+        echo ">>> Configurando excecoes Java..."
+        DEPLOY_DIR="/usr/lib/jvm/.deployment"
+        mkdir -p "$DEPLOY_DIR"
+        DEPLOY_FILE="$DEPLOY_DIR/deployment.properties"
+        echo "# Excecoes Java - SeederLinux" > "$DEPLOY_FILE"
+        echo "deployment.security.level=MEDIUM" >> "$DEPLOY_FILE"
+
+        IFS=$'\n,' read -ra EXC_URLS <<< "$JAVA_EXCEPTIONS"
+        IDX=0
+        for EXC_URL in "${EXC_URLS[@]}"; do
+            EXC_URL=$(echo "$EXC_URL" | xargs)
+            if [ -n "$EXC_URL" ] && [ "$EXC_URL" != "" ]; then
+                echo "javaws.allow.${IDX}=$EXC_URL" >> "$DEPLOY_FILE"
+                IDX=$((IDX+1))
+            fi
+        done
+        echo ">>> Excecoes Java configuradas ($IDX URLs)"
+    fi
+
+    if command -v java &>/dev/null; then
+        JAVA_VERSION=$(java -version 2>&1 | head -1)
+        echo ">>> Java instalado: $JAVA_VERSION"
+    else
+        echo ">>> AVISO: Java nao instalado."
+    fi
+else
+    echo ">>> Java 8 desativado (INSTALL_JAVA8=false). Pulando."
+fi
+
+# ============================================================
+# Firefox 52.7 ESR (para applets Java) - apenas se INSTALL_FIREFOX52=true
+# ============================================================
+if [ "$INSTALL_FIREFOX52" = "true" ]; then
+    echo ">>> Instalando Firefox 52.7 ESR..."
+
+    FF_LEGADO_DIR="/opt/firefox-legado"
+    FF_LEGADO_TARBALL="/tmp/firefox-52.7-esr.tar.bz2"
+    FF_LEGADO_URL="${BASE_URL}/downloads/firefox-52.7.3esr.tar.bz2"
+
+    mkdir -p /opt
+
+    if wget -q -O "$FF_LEGADO_TARBALL" "$FF_LEGADO_URL" 2>/dev/null; then
+        echo ">>> Firefox 52.7 baixado do repositorio interno"
+        tar xjf "$FF_LEGADO_TARBALL" -C /opt/
+        mv /opt/firefox "$FF_LEGADO_DIR" 2>/dev/null || true
+        rm -f "$FF_LEGADO_TARBALL"
+    else
+        echo ">>> AVISO: Nao foi possivel baixar Firefox 52.7 do repositorio interno."
+        echo ">>> Tentando download da Mozilla..."
+
+        FF_MOZILLA_URL="https://ftp.mozilla.org/pub/firefox/releases/52.7.3esr/linux-x86_64/en-US/firefox-52.7.3esr.tar.bz2"
+        if wget -q -O "$FF_LEGADO_TARBALL" "$FF_MOZILLA_URL" 2>/dev/null; then
+            tar xjf "$FF_LEGADO_TARBALL" -C /opt/
+            mv /opt/firefox "$FF_LEGADO_DIR" 2>/dev/null || true
+            rm -f "$FF_LEGADO_TARBALL"
+        else
+            echo ">>> AVISO: Nao foi possivel baixar Firefox 52.7."
+        fi
+    fi
+
+    if [ -d "$FF_LEGADO_DIR" ]; then
+        ln -sf "${FF_LEGADO_DIR}/firefox" /usr/local/bin/firefox-legado
+        echo ">>> Firefox 52.7 ESR instalado em: $FF_LEGADO_DIR"
+
+        mkdir -p /usr/share/applications
+        cat > /usr/share/applications/firefox-legado.desktop <<EOF
+[Desktop Entry]
+Version=1.0
+Name=Firefox 52.7 ESR (Legado)
+Comment=Navegador Firefox 52.7 ESR para sistemas legados
+Exec=${FF_LEGADO_DIR}/firefox
+Icon=${FF_LEGADO_DIR}/browser/icons/mozicon128.png
+Terminal=false
+Type=Application
+Categories=Network;WebBrowser;
+EOF
+        echo ">>> Entrada de desktop criada"
+    else
+        echo ">>> AVISO: Firefox 52.7 ESR nao instalado."
+    fi
+
+    echo ">>> Configurando plugin Java para Firefox legado..."
+    if [ -d "$FF_LEGADO_DIR" ] && command -v java &>/dev/null; then
+        JAVA_HOME_DIR=$(dirname $(dirname $(readlink -f $(which java))))
+        PLUGIN_DIR="${FF_LEGADO_DIR}/browser/plugins"
+        mkdir -p "$PLUGIN_DIR"
+
+        find "$JAVA_HOME_DIR" -name "libnpjp2.so" -exec ln -sf {} "$PLUGIN_DIR/libnpjp2.so" \; 2>/dev/null || {
+            echo ">>> AVISO: Plugin Java (libnpjp2.so) nao encontrado."
+        }
+        echo ">>> Plugin Java configurado"
+    fi
+else
+    echo ">>> Firefox 52.7 desativado (INSTALL_FIREFOX52=false). Pulando."
+fi
+
+echo ">>> [05] Sistemas legados configurados!"
+echo "============================================================"
+$SeederScript$,
+    TRUE,
+    TRUE,
+    5,
+    1,
+    NULL
+) ON CONFLICT (filename) DO UPDATE SET
+    name = EXCLUDED.name,
+    description = EXCLUDED.description,
+    content = EXCLUDED.content,
+    execution_order = EXCLUDED.execution_order,
+    version = EXCLUDED.version,
+    is_active = EXCLUDED.is_active,
+    updated_at = CURRENT_TIMESTAMP;
+
+
+-- Ingresso em Dominio AD (ordem 6) - core_domain.sh
 INSERT INTO scripts (name, filename, description, content, is_core, is_active, execution_order, version, organization_id)
 VALUES (
     'Ingresso em Dominio AD',
     'core_domain.sh',
-    'Ingressa a estacao no Active Directory (SSSD/Winbind com fallback).',
+    'Ingressa a estacao no Active Directory (SSSD/Winbind com fallback). Altera DNS para AD.',
     $SeederScript$#!/bin/bash
 # ============================================================================
 # Core Script: core_domain.sh
@@ -1196,7 +1550,7 @@ echo "============================================================"
 $SeederScript$,
     TRUE,
     TRUE,
-    4,
+    6,
     1,
     NULL
 ) ON CONFLICT (filename) DO UPDATE SET
@@ -1209,9 +1563,7 @@ $SeederScript$,
     updated_at = CURRENT_TIMESTAMP;
 
 
--- ============================================================================
--- Configuracao de Navegador (ordem 5) - core_browser.sh
--- ============================================================================
+-- Configuracao de Navegador (ordem 7) - core_browser.sh
 INSERT INTO scripts (name, filename, description, content, is_core, is_active, execution_order, version, organization_id)
 VALUES (
     'Configuracao de Navegador',
@@ -1421,7 +1773,7 @@ echo "============================================================"
 $SeederScript$,
     TRUE,
     TRUE,
-    5,
+    7,
     1,
     NULL
 ) ON CONFLICT (filename) DO UPDATE SET
@@ -1434,9 +1786,7 @@ $SeederScript$,
     updated_at = CURRENT_TIMESTAMP;
 
 
--- ============================================================================
--- Agente de Inventario OCS (ordem 6) - core_inventory.sh
--- ============================================================================
+-- Agente de Inventario OCS (ordem 8) - core_inventory.sh
 INSERT INTO scripts (name, filename, description, content, is_core, is_active, execution_order, version, organization_id)
 VALUES (
     'Agente de Inventario OCS',
@@ -1561,7 +1911,7 @@ echo "============================================================"
 $SeederScript$,
     TRUE,
     TRUE,
-    6,
+    8,
     1,
     NULL
 ) ON CONFLICT (filename) DO UPDATE SET
@@ -1574,9 +1924,7 @@ $SeederScript$,
     updated_at = CURRENT_TIMESTAMP;
 
 
--- ============================================================================
--- Configuracao de Impressoras (ordem 7) - core_printers.sh
--- ============================================================================
+-- Configuracao de Impressoras (ordem 9) - core_printers.sh
 INSERT INTO scripts (name, filename, description, content, is_core, is_active, execution_order, version, organization_id)
 VALUES (
     'Configuracao de Impressoras',
@@ -1728,7 +2076,7 @@ echo "============================================================"
 $SeederScript$,
     TRUE,
     TRUE,
-    7,
+    9,
     1,
     NULL
 ) ON CONFLICT (filename) DO UPDATE SET
@@ -1741,9 +2089,7 @@ $SeederScript$,
     updated_at = CURRENT_TIMESTAMP;
 
 
--- ============================================================================
--- Configuracao VNC (ordem 8) - core_vnc.sh
--- ============================================================================
+-- Configuracao VNC (ordem 10) - core_vnc.sh
 INSERT INTO scripts (name, filename, description, content, is_core, is_active, execution_order, version, organization_id)
 VALUES (
     'Configuracao VNC',
@@ -1891,7 +2237,7 @@ echo "============================================================"
 $SeederScript$,
     TRUE,
     TRUE,
-    8,
+    10,
     1,
     NULL
 ) ON CONFLICT (filename) DO UPDATE SET
@@ -1904,9 +2250,7 @@ $SeederScript$,
     updated_at = CURRENT_TIMESTAMP;
 
 
--- ============================================================================
--- Configuracao de Conky (ordem 9) - core_conky.sh
--- ============================================================================
+-- Configuracao de Conky (ordem 11) - core_conky.sh
 INSERT INTO scripts (name, filename, description, content, is_core, is_active, execution_order, version, organization_id)
 VALUES (
     'Configuracao de Conky',
@@ -2158,468 +2502,6 @@ echo "============================================================"
 $SeederScript$,
     TRUE,
     TRUE,
-    9,
-    1,
-    NULL
-) ON CONFLICT (filename) DO UPDATE SET
-    name = EXCLUDED.name,
-    description = EXCLUDED.description,
-    content = EXCLUDED.content,
-    execution_order = EXCLUDED.execution_order,
-    version = EXCLUDED.version,
-    is_active = EXCLUDED.is_active,
-    updated_at = CURRENT_TIMESTAMP;
-
-
--- ============================================================================
--- Instalacao de Aplicacoes Extras (ordem 10) - core_apps.sh
--- ============================================================================
-INSERT INTO scripts (name, filename, description, content, is_core, is_active, execution_order, version, organization_id)
-VALUES (
-    'Instalacao de Aplicacoes Extras',
-    'core_apps.sh',
-    'Instala aplicacoes extras (OnlyOffice, Chrome, etc).',
-    $SeederScript$#!/bin/bash
-# ============================================================================
-# Core Script: core_apps.sh
-# SeederLinux Lite - OnlyOffice, Chrome, Firefox ESR
-# ============================================================================
-# Instala aplicativos adicionais: OnlyOffice Desktop Editors, Google Chrome
-# estavel e Firefox ESR.
-# Os placeholders {{VARIAVEL}} são substituídos automaticamente
-# pelo sistema na geração do bundle.
-# ============================================================================
-
-set -e
-
-echo "============================================================"
-echo "10 - Instalar aplicativos (Chrome, OnlyOffice via .deb/wget)"
-echo "============================================================"
-
-# ============================================================
-# Variáveis
-# ============================================================
-INSTALL_ONLYOFFICE="{{INSTALL_ONLYOFFICE}}"
-INSTALL_CHROME="{{INSTALL_CHROME}}"
-INSTALL_CHROMIUM="{{INSTALL_CHROMIUM}}"
-BASE_URL="{{BASE_URL}}"
-PROXY_MODE="{{PROXY_MODE}}"
-PROXY_HTTP="{{PROXY_HTTP}}"
-PROXY_PORTA="{{PROXY_PORTA}}"
-
-echo ">>> Instalar OnlyOffice: $INSTALL_ONLYOFFICE"
-echo ">>> Instalar Chrome: $INSTALL_CHROME"
-echo ">>> Instalar Chromium: $INSTALL_CHROMIUM"
-
-# ============================================================
-# Verificar se pelo menos um toggle esta ativo
-# ============================================================
-if [ "$INSTALL_ONLYOFFICE" != "true" ] && [ "$INSTALL_CHROME" != "true" ] && [ "$INSTALL_CHROMIUM" != "true" ]; then
-    echo ">>> Instalacao de apps desativada. Pulando."
-    echo ">>> [10] Aplicativos nao instalados (desativado)."
-    echo "============================================================"
-    exit 0
-fi
-
-export DEBIAN_FRONTEND=noninteractive
-
-# Configurar proxy para downloads se necessario
-if [ "$PROXY_MODE" = "MANUAL" ] && [ -n "$PROXY_HTTP" ] && [ "$PROXY_HTTP" != "" ]; then
-    export http_proxy="http://${PROXY_HTTP}:${PROXY_PORTA}"
-    export https_proxy="http://${PROXY_HTTP}:${PROXY_PORTA}"
-fi
-
-# ============================================================
-# Google Chrome (instalado via .deb/wget, nao via apt-get)
-# ============================================================
-if [ "$INSTALL_CHROME" = "true" ]; then
-    echo ">>> Instalando Google Chrome..."
-    CHROME_DEB="/tmp/google-chrome-stable.deb"
-
-    # Baixar Chrome
-    if wget -q -O "$CHROME_DEB" "https://dl.google.com/linux/direct/google-chrome-stable_current_amd64.deb"; then
-        apt-get install -y "$CHROME_DEB" || {
-            echo ">>> AVISO: Falha ao instalar Google Chrome. Tentando dependencias..."
-            apt-get install -y -f
-            apt-get install -y "$CHROME_DEB" || {
-                echo ">>> AVISO: Google Chrome nao instalado."
-            }
-        }
-        rm -f "$CHROME_DEB"
-    else
-        echo ">>> AVISO: Nao foi possivel baixar Google Chrome."
-        echo ">>> Verifique conectividade e configuracao de proxy."
-    fi
-else
-    echo ">>> Google Chrome desativado (INSTALL_CHROME=false). Pulando."
-fi
-
-# ============================================================
-# Chromium (via apt-get)
-# ============================================================
-if [ "$INSTALL_CHROMIUM" = "true" ]; then
-    echo ">>> Instalando Chromium..."
-    apt-get install -y chromium 2>/dev/null || apt-get install -y chromium-browser 2>/dev/null || {
-        echo ">>> AVISO: Nao foi possivel instalar Chromium."
-    }
-else
-    echo ">>> Chromium desativado (INSTALL_CHROMIUM=false). Pulando."
-fi
-
-# ============================================================
-# OnlyOffice Desktop Editors
-# ============================================================
-if [ "$INSTALL_ONLYOFFICE" = "true" ]; then
-    echo ">>> Instalando OnlyOffice Desktop Editors..."
-
-# Metodo 1: Via repositorio APT oficial
-ONLYOFFICE_KEY="/tmp/onlyoffice-key.asc"
-ONLYOFFICE_REPO_LIST="/etc/apt/sources.list.d/onlyoffice.list"
-
-# Baixar e adicionar chave GPG
-if wget -q -O "$ONLYOFFICE_KEY" "https://download.onlyoffice.com/GPG-KEY-ONLYOFFICE"; then
-    gpg --dearmor < "$ONLYOFFICE_KEY" > /usr/share/keyrings/onlyoffice-keyring.gpg 2>/dev/null || \
-        apt-key add "$ONLYOFFICE_KEY" 2>/dev/null || true
-
-    cat > "$ONLYOFFICE_REPO_LIST" <<EOF
-deb [signed-by=/usr/share/keyrings/onlyoffice-keyring.gpg] https://download.onlyoffice.com/repo/debian squeeze main
-EOF
-
-    apt-get update
-    apt-get install -y onlyoffice-desktopeditors || {
-        echo ">>> AVISO: Falha ao instalar OnlyOffice via repositorio."
-        echo ">>> Tentando download direto..."
-
-        # Metodo 2: Download direto do .deb
-        ONLYOFFICE_DEB="/tmp/onlyoffice-desktopeditors.deb"
-        if wget -q -O "$ONLYOFFICE_DEB" "https://download.onlyoffice.com/install/desktop/editors/linux/onlyoffice-desktopeditors_amd64.deb"; then
-            apt-get install -y "$ONLYOFFICE_DEB" || {
-                echo ">>> AVISO: Falha ao instalar OnlyOffice via .deb direto."
-            }
-            rm -f "$ONLYOFFICE_DEB"
-        else
-            echo ">>> AVISO: Nao foi possivel baixar OnlyOffice."
-        fi
-    }
-    rm -f "$ONLYOFFICE_KEY"
-else
-    echo ">>> AVISO: Nao foi possivel obter chave do OnlyOffice."
-    echo ">>> Tentando instalar via repositorio Debian..."
-
-    apt-get install -y onlyoffice-desktopeditors 2>/dev/null || {
-            echo ">>> AVISO: OnlyOffice nao disponivel. Instalacao ignorada."
-        }
-    fi
-else
-    echo ">>> OnlyOffice desativado (INSTALL_ONLYOFFICE=false). Pulando."
-fi
-
-# ============================================================
-# Verificar instalacoes
-# ============================================================
-echo ">>> Verificando instalacoes..."
-command -v firefox-esr &> /dev/null && echo ">>> Firefox ESR: OK" || echo ">>> Firefox ESR: NAO INSTALADO"
-command -v google-chrome &> /dev/null && echo ">>> Google Chrome: OK" || echo ">>> Google Chrome: NAO INSTALADO"
-command -v onlyoffice-desktopeditors &> /dev/null && echo ">>> OnlyOffice: OK" || echo ">>> OnlyOffice: NAO INSTALADO"
-
-echo ">>> [10] Aplicativos instalados!"
-echo "============================================================"
-$SeederScript$,
-    TRUE,
-    TRUE,
-    10,
-    1,
-    NULL
-) ON CONFLICT (filename) DO UPDATE SET
-    name = EXCLUDED.name,
-    description = EXCLUDED.description,
-    content = EXCLUDED.content,
-    execution_order = EXCLUDED.execution_order,
-    version = EXCLUDED.version,
-    is_active = EXCLUDED.is_active,
-    updated_at = CURRENT_TIMESTAMP;
-
-
--- ============================================================================
--- Suporte a Sistemas Legados (ordem 11) - core_legados.sh
--- ============================================================================
-INSERT INTO scripts (name, filename, description, content, is_core, is_active, execution_order, version, organization_id)
-VALUES (
-    'Suporte a Sistemas Legados',
-    'core_legados.sh',
-    'Instala Java 8 e Firefox 52 ESR para compatibilidade com sistemas legados.',
-    $SeederScript$#!/bin/bash
-# ============================================================================
-# Core Script: core_legados.sh
-# SeederLinux Lite - Java 8, Firefox 52.7 ESR (sistemas legados)
-# ============================================================================
-# Instala Java 8 (OpenJDK ou Oracle) e/ou Firefox 52.7 ESR para compatibilidade
-# com sistemas legados (applets Java, sistemas antigos da intranet).
-# Cada componente e controlado por seu proprio toggle:
-#   INSTALL_JAVA8     - Instalar Java 8?
-#   INSTALL_FIREFOX52 - Instalar Firefox 52.7 ESR?
-# Os placeholders {{VARIAVEL}} sao substituidos automaticamente
-# pelo sistema na geracao do bundle.
-# ============================================================================
-
-set -e
-
-echo "============================================================"
-echo "11 - Configurar sistemas legados (Java 8, Firefox 52.7)"
-echo "============================================================"
-
-# ============================================================
-# Variaveis
-# ============================================================
-INSTALL_JAVA8="{{INSTALL_JAVA8}}"
-INSTALL_FIREFOX52="{{INSTALL_FIREFOX52}}"
-BASE_URL="{{BASE_URL}}"
-PROXY_MODE="{{PROXY_MODE}}"
-PROXY_HTTP="{{PROXY_HTTP}}"
-PROXY_PORTA="{{PROXY_PORTA}}"
-JAVA_EXCEPTIONS="{{JAVA_EXCEPTIONS}}"
-
-echo ">>> Instalar Java 8: $INSTALL_JAVA8"
-echo ">>> Instalar Firefox 52.7: $INSTALL_FIREFOX52"
-echo ">>> Excecoes Java: ${JAVA_EXCEPTIONS:-nenhuma}"
-
-# ============================================================
-# Verificar se pelo menos um toggle esta ativo
-# ============================================================
-if [ "$INSTALL_JAVA8" != "true" ] && [ "$INSTALL_FIREFOX52" != "true" ]; then
-    echo ">>> Sistemas legados desativados. Pulando."
-    echo ">>> [11] Sistemas legados nao instalados (desativado)."
-    echo "============================================================"
-    exit 0
-fi
-
-export DEBIAN_FRONTEND=noninteractive
-
-# Configurar proxy para downloads
-if [ "$PROXY_MODE" = "MANUAL" ] && [ -n "$PROXY_HTTP" ] && [ "$PROXY_HTTP" != "" ]; then
-    export http_proxy="http://${PROXY_HTTP}:${PROXY_PORTA}"
-    export https_proxy="http://${PROXY_HTTP}:${PROXY_PORTA}"
-fi
-
-# ============================================================
-# Java 8 (OpenJDK 8) - apenas se INSTALL_JAVA8=true
-# ============================================================
-if [ "$INSTALL_JAVA8" = "true" ]; then
-    echo ">>> Instalando Java 8 (OpenJDK 8)..."
-
-    # Verificar se ja esta instalado (foi instalado no core_packages.sh)
-    if command -v java &>/dev/null; then
-        JAVA_VERSION=$(java -version 2>&1 | head -1)
-        echo ">>> Java ja instalado: $JAVA_VERSION"
-    else
-        echo ">>> AVISO: Java 8 nao foi instalado no core_packages.sh."
-        echo ">>> Tentando instalar via repositorio Adoptium/Temurin..."
-
-        if wget -q -O /tmp/adoptium-key.asc "https://packages.adoptium.net/artifactory/api/gpg/key/public" 2>/dev/null; then
-            gpg --dearmor < /tmp/adoptium-key.asc > /usr/share/keyrings/adoptium-keyring.gpg 2>/dev/null || true
-            echo "deb [signed-by=/usr/share/keyrings/adoptium-keyring.gpg] https://packages.adoptium.net/artifactory/deb bookworm main" \
-                > /etc/apt/sources.list.d/adoptium.list
-            apt-get update
-            apt-get install -y temurin-8-jre || {
-                echo ">>> AVISO: Falha ao instalar Java 8 via Adoptium."
-            }
-            rm -f /tmp/adoptium-key.asc
-        else
-            echo ">>> AVISO: Nao foi possivel obter chave do repositorio Java 8."
-        fi
-    fi
-
-    # Configurar excecoes Java (deployment.properties) se fornecidas
-    if [ -n "$JAVA_EXCEPTIONS" ] && [ "$JAVA_EXCEPTIONS" != "" ]; then
-        echo ">>> Configurando excecoes Java..."
-        DEPLOY_DIR="/usr/lib/jvm/.deployment"
-        mkdir -p "$DEPLOY_DIR"
-        DEPLOY_FILE="$DEPLOY_DIR/deployment.properties"
-        echo "# Excecoes Java - SeederLinux" > "$DEPLOY_FILE"
-        echo "deployment.security.level=MEDIUM" >> "$DEPLOY_FILE"
-        # Processar cada URL (uma por linha ou separada por virgula)
-        IFS=
-else
-    echo ">>> Java 8 desativado (INSTALL_JAVA8=false). Pulando."
-fi
-
-# ============================================================
-# Firefox 52.7 ESR (para applets Java) - apenas se INSTALL_FIREFOX52=true
-# ============================================================
-if [ "$INSTALL_FIREFOX52" = "true" ]; then
-    echo ">>> Instalando Firefox 52.7 ESR..."
-
-    FF_LEGADO_DIR="/opt/firefox-legado"
-    FF_LEGADO_TARBALL="/tmp/firefox-52.7-esr.tar.bz2"
-    FF_LEGADO_URL="${BASE_URL}/downloads/firefox-52.7.3esr.tar.bz2"
-
-    mkdir -p /opt
-
-    # Tentar baixar do repositorio interno
-    if wget -q -O "$FF_LEGADO_TARBALL" "$FF_LEGADO_URL" 2>/dev/null; then
-        echo ">>> Firefox 52.7 baixado do repositorio interno"
-        tar xjf "$FF_LEGADO_TARBALL" -C /opt/
-        mv /opt/firefox "$FF_LEGADO_DIR" 2>/dev/null || true
-        rm -f "$FF_LEGADO_TARBALL"
-    else
-        echo ">>> AVISO: Nao foi possivel baixar Firefox 52.7 do repositorio interno."
-        echo ">>> Tentando download da Mozilla..."
-
-        FF_MOZILLA_URL="https://ftp.mozilla.org/pub/firefox/releases/52.7.3esr/linux-x86_64/en-US/firefox-52.7.3esr.tar.bz2"
-        if wget -q -O "$FF_LEGADO_TARBALL" "$FF_MOZILLA_URL" 2>/dev/null; then
-            tar xjf "$FF_LEGADO_TARBALL" -C /opt/
-            mv /opt/firefox "$FF_LEGADO_DIR" 2>/dev/null || true
-            rm -f "$FF_LEGADO_TARBALL"
-        else
-            echo ">>> AVISO: Nao foi possivel baixar Firefox 52.7."
-        fi
-    fi
-
-    # Criar link simbolico
-    if [ -d "$FF_LEGADO_DIR" ]; then
-        ln -sf "${FF_LEGADO_DIR}/firefox" /usr/local/bin/firefox-legado
-        echo ">>> Firefox 52.7 ESR instalado em: $FF_LEGADO_DIR"
-
-        # Criar entrada de desktop
-        mkdir -p /usr/share/applications
-        cat > /usr/share/applications/firefox-legado.desktop <<EOF
-[Desktop Entry]
-Version=1.0
-Name=Firefox 52.7 ESR (Legado)
-Comment=Navegador Firefox 52.7 ESR para sistemas legados
-Exec=${FF_LEGADO_DIR}/firefox
-Icon=${FF_LEGADO_DIR}/browser/icons/mozicon128.png
-Terminal=false
-Type=Application
-Categories=Network;WebBrowser;
-EOF
-        echo ">>> Entrada de desktop criada"
-    else
-        echo ">>> AVISO: Firefox 52.7 ESR nao instalado."
-    fi
-
-    # Configurar plugin Java para Firefox legado
-    echo ">>> Configurando plugin Java para Firefox legado..."
-    if [ -d "$FF_LEGADO_DIR" ] && command -v java &> /dev/null; then
-        JAVA_HOME=$(dirname $(dirname $(readlink -f $(which java))))
-        PLUGIN_DIR="${FF_LEGADO_DIR}/browser/plugins"
-        mkdir -p "$PLUGIN_DIR"
-
-        # Localizar libnpjp2.so
-        find "$JAVA_HOME" -name "libnpjp2.so" -exec ln -sf {} "$PLUGIN_DIR/libnpjp2.so" \; 2>/dev/null || {
-            echo ">>> AVISO: Plugin Java (libnpjp2.so) nao encontrado."
-        }
-        echo ">>> Plugin Java configurado"
-    fi
-else
-    echo ">>> Firefox 52.7 desativado (INSTALL_FIREFOX52=false). Pulando."
-fi
-
-echo ">>> [11] Sistemas legados configurados!"
-echo "============================================================"
-\n,' read -ra EXC_URLS <<< "$JAVA_EXCEPTIONS"
-        IDX=0
-        for EXC_URL in "${EXC_URLS[@]}"; do
-            EXC_URL=$(echo "$EXC_URL" | xargs)
-            if [ -n "$EXC_URL" ] && [ "$EXC_URL" != "" ]; then
-                echo "deployment.security.sandbox.awtwarningwindow=false" >> "$DEPLOY_FILE"
-                echo "# Excecao $IDX: $EXC_URL" >> "$DEPLOY_FILE"
-                # Adicionar a lista de excecoes
-                echo "javaws.allow.0=$EXC_URL" >> "$DEPLOY_FILE"
-                IDX=$((IDX+1))
-            fi
-        done
-        echo ">>> Excecoes Java configuradas ($IDX URLs)"
-    fi
-
-    # Verificar Java 8
-    if command -v java &> /dev/null; then
-        JAVA_VERSION=$(java -version 2>&1 | head -1)
-        echo ">>> Java instalado: $JAVA_VERSION"
-    else
-        echo ">>> AVISO: Java nao instalado."
-    fi
-else
-    echo ">>> Java 8 desativado (INSTALL_JAVA8=false). Pulando."
-fi
-
-# ============================================================
-# Firefox 52.7 ESR (para applets Java) - apenas se INSTALL_FIREFOX52=true
-# ============================================================
-if [ "$INSTALL_FIREFOX52" = "true" ]; then
-    echo ">>> Instalando Firefox 52.7 ESR..."
-
-    FF_LEGADO_DIR="/opt/firefox-legado"
-    FF_LEGADO_TARBALL="/tmp/firefox-52.7-esr.tar.bz2"
-    FF_LEGADO_URL="${BASE_URL}/downloads/firefox-52.7.3esr.tar.bz2"
-
-    mkdir -p /opt
-
-    # Tentar baixar do repositorio interno
-    if wget -q -O "$FF_LEGADO_TARBALL" "$FF_LEGADO_URL" 2>/dev/null; then
-        echo ">>> Firefox 52.7 baixado do repositorio interno"
-        tar xjf "$FF_LEGADO_TARBALL" -C /opt/
-        mv /opt/firefox "$FF_LEGADO_DIR" 2>/dev/null || true
-        rm -f "$FF_LEGADO_TARBALL"
-    else
-        echo ">>> AVISO: Nao foi possivel baixar Firefox 52.7 do repositorio interno."
-        echo ">>> Tentando download da Mozilla..."
-
-        FF_MOZILLA_URL="https://ftp.mozilla.org/pub/firefox/releases/52.7.3esr/linux-x86_64/en-US/firefox-52.7.3esr.tar.bz2"
-        if wget -q -O "$FF_LEGADO_TARBALL" "$FF_MOZILLA_URL" 2>/dev/null; then
-            tar xjf "$FF_LEGADO_TARBALL" -C /opt/
-            mv /opt/firefox "$FF_LEGADO_DIR" 2>/dev/null || true
-            rm -f "$FF_LEGADO_TARBALL"
-        else
-            echo ">>> AVISO: Nao foi possivel baixar Firefox 52.7."
-        fi
-    fi
-
-    # Criar link simbolico
-    if [ -d "$FF_LEGADO_DIR" ]; then
-        ln -sf "${FF_LEGADO_DIR}/firefox" /usr/local/bin/firefox-legado
-        echo ">>> Firefox 52.7 ESR instalado em: $FF_LEGADO_DIR"
-
-        # Criar entrada de desktop
-        mkdir -p /usr/share/applications
-        cat > /usr/share/applications/firefox-legado.desktop <<EOF
-[Desktop Entry]
-Version=1.0
-Name=Firefox 52.7 ESR (Legado)
-Comment=Navegador Firefox 52.7 ESR para sistemas legados
-Exec=${FF_LEGADO_DIR}/firefox
-Icon=${FF_LEGADO_DIR}/browser/icons/mozicon128.png
-Terminal=false
-Type=Application
-Categories=Network;WebBrowser;
-EOF
-        echo ">>> Entrada de desktop criada"
-    else
-        echo ">>> AVISO: Firefox 52.7 ESR nao instalado."
-    fi
-
-    # Configurar plugin Java para Firefox legado
-    echo ">>> Configurando plugin Java para Firefox legado..."
-    if [ -d "$FF_LEGADO_DIR" ] && command -v java &> /dev/null; then
-        JAVA_HOME=$(dirname $(dirname $(readlink -f $(which java))))
-        PLUGIN_DIR="${FF_LEGADO_DIR}/browser/plugins"
-        mkdir -p "$PLUGIN_DIR"
-
-        # Localizar libnpjp2.so
-        find "$JAVA_HOME" -name "libnpjp2.so" -exec ln -sf {} "$PLUGIN_DIR/libnpjp2.so" \; 2>/dev/null || {
-            echo ">>> AVISO: Plugin Java (libnpjp2.so) nao encontrado."
-        }
-        echo ">>> Plugin Java configurado"
-    fi
-else
-    echo ">>> Firefox 52.7 desativado (INSTALL_FIREFOX52=false). Pulando."
-fi
-
-echo ">>> [11] Sistemas legados configurados!"
-echo "============================================================"
-$SeederScript$,
-    TRUE,
-    TRUE,
     11,
     1,
     NULL
@@ -2633,14 +2515,12 @@ $SeederScript$,
     updated_at = CURRENT_TIMESTAMP;
 
 
--- ============================================================================
 -- Configuracoes Adicionais (ordem 12) - core_config.sh
--- ============================================================================
 INSERT INTO scripts (name, filename, description, content, is_core, is_active, execution_order, version, organization_id)
 VALUES (
     'Configuracoes Adicionais',
     'core_config.sh',
-    'Configuracoes diversas do sistema (sysctl, limits, etc).',
+    'Cria /etc/seederlinux/config.env com todas as variaveis persistentes para logon/logoff.',
     $SeederScript$#!/bin/bash
 # ============================================================================
 # Core Script: core_config.sh
@@ -2791,9 +2671,7 @@ $SeederScript$,
     updated_at = CURRENT_TIMESTAMP;
 
 
--- ============================================================================
 -- Identidade Visual (Branding) (ordem 13) - core_branding.sh
--- ============================================================================
 INSERT INTO scripts (name, filename, description, content, is_core, is_active, execution_order, version, organization_id)
 VALUES (
     'Identidade Visual (Branding)',
@@ -3124,9 +3002,7 @@ $SeederScript$,
     updated_at = CURRENT_TIMESTAMP;
 
 
--- ============================================================================
 -- Script de Logon Persistente (ordem 14) - core_logon.sh
--- ============================================================================
 INSERT INTO scripts (name, filename, description, content, is_core, is_active, execution_order, version, organization_id)
 VALUES (
     'Script de Logon Persistente',
@@ -3574,9 +3450,7 @@ $SeederScript$,
     updated_at = CURRENT_TIMESTAMP;
 
 
--- ============================================================================
 -- Script de Logoff Persistente (ordem 15) - core_logoff.sh
--- ============================================================================
 INSERT INTO scripts (name, filename, description, content, is_core, is_active, execution_order, version, organization_id)
 VALUES (
     'Script de Logoff Persistente',
@@ -3798,9 +3672,7 @@ $SeederScript$,
     updated_at = CURRENT_TIMESTAMP;
 
 
--- ============================================================================
 -- Sessao LightDM (ordem 16) - core_session_lightdm.sh
--- ============================================================================
 INSERT INTO scripts (name, filename, description, content, is_core, is_active, execution_order, version, organization_id)
 VALUES (
     'Sessao LightDM',
@@ -3979,9 +3851,7 @@ $SeederScript$,
     updated_at = CURRENT_TIMESTAMP;
 
 
--- ============================================================================
 -- Sessao GDM3 (ordem 16) - core_session_gdm3.sh
--- ============================================================================
 INSERT INTO scripts (name, filename, description, content, is_core, is_active, execution_order, version, organization_id)
 VALUES (
     'Sessao GDM3',
@@ -4165,9 +4035,7 @@ $SeederScript$,
     updated_at = CURRENT_TIMESTAMP;
 
 
--- ============================================================================
 -- Sessao SDDM (ordem 16) - core_session_sddm.sh
--- ============================================================================
 INSERT INTO scripts (name, filename, description, content, is_core, is_active, execution_order, version, organization_id)
 VALUES (
     'Sessao SDDM',
@@ -4354,14 +4222,12 @@ $SeederScript$,
     updated_at = CURRENT_TIMESTAMP;
 
 
--- ============================================================================
 -- Configuracao de Proxy (ordem 17) - core_proxy.sh
--- ============================================================================
 INSERT INTO scripts (name, filename, description, content, is_core, is_active, execution_order, version, organization_id)
 VALUES (
     'Configuracao de Proxy',
     'core_proxy.sh',
-    'Configura proxy corporativo no sistema (apt, curl, wget, env).',
+    'Configura proxy corporativo no sistema (apt, curl, wget, env). Executado por ULTIMO.',
     $SeederScript$#!/bin/bash
 # ============================================================================
 # Core Script: core_proxy.sh
@@ -4506,26 +4372,7 @@ $SeederScript$,
     is_active = EXCLUDED.is_active,
     updated_at = CURRENT_TIMESTAMP;
 
-
-
--- ============================================================================
--- FIM: 19 scripts core inseridos.
--- Ordem de execucao:
---   01 core_dns.sh              (configura DNS ANTES de apt-get update)
---   02 core_repositories.sh     (agora tem DNS resolvendo)
---   03 core_packages.sh
---   04 core_domain.sh
---   05 core_browser.sh
---   06 core_inventory.sh
---   07 core_printers.sh
---   08 core_vnc.sh
---   09 core_conky.sh
---   10 core_apps.sh
---   11 core_legados.sh
---   12 core_config.sh
---   13 core_branding.sh
---   14 core_logon.sh
---   15 core_logoff.sh
---   16 core_session_{lightdm|gdm3|sddm}.sh   (bundle mantem apenas 1 conforme DISPLAY_MANAGER)
---   17 core_proxy.sh
--- ============================================================================
+-- Eliminar placeholders residuais que impedem a geracao de bundles
+UPDATE scripts SET content = replace(content, '{{VARIAVEL}}', 'VARIAVEL');
+UPDATE scripts SET content = replace(content, '{{INSTALL_APPS}}', 'true');
+UPDATE scripts SET content = replace(content, '{{INSTALL_LEGADOS}}', 'false');

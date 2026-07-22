@@ -116,6 +116,14 @@ try {
             if ($method !== 'POST') jsonError('Method not allowed', 405);
             handleToggleBundleActive($input);
             break;
+        case 'bundle':
+            if ($_SERVER['REQUEST_METHOD'] === 'DELETE') {
+                $bundleId = (int)($input['id'] ?? 0);
+                handleDeleteBundle($bundleId);
+            } elseif ($_SERVER['REQUEST_METHOD'] === 'PUT') {
+                handleUpdateBundleDescription($input);
+            }
+            break;
 
         // Users
         case 'users':
@@ -738,7 +746,7 @@ function handleGenerateBundle($input) {
         );
     } else {
         $placeholders = implode(',', array_fill(0, count($selectedScripts), '?'));
-        $params = array_merge([$orgId], $selectedScripts);
+        $params = $selectedScripts;
         $scripts = Database::fetchAll(
             "SELECT id, name, filename, content, is_core FROM scripts
              WHERE is_active = TRUE AND (is_core = TRUE OR id IN ($placeholders))
@@ -1454,10 +1462,43 @@ function handleToggleBundleActive($input) {
         jsonError('Sem permissao', 403);
     }
 
-    $newStatus = !$bundle['is_active'];
+    $currentStatus = $bundle['is_active'] ?? false;
+    $newStatus = $currentStatus ? 'false' : 'true';
     Database::execute("UPDATE deploy_bundles SET is_active = ? WHERE id = ?", [$newStatus, $bundleId]);
 
     log_audit($newStatus ? 'ACTIVATE' : 'DEACTIVATE', 'bundles', $bundleId, []);
     jsonSuccess(null, $newStatus ? 'Bundle ativado' : 'Bundle desativado');
+}
+
+function handleDeleteBundle($id) {
+    $bundle = Database::fetchOne("SELECT id, organization_id FROM deploy_bundles WHERE id = ?", [$id]);
+    if (!$bundle) jsonError('Bundle nao encontrado', 404);
+
+    $userOrgId = getUserOrgId();
+    if ($userOrgId !== null && !isAdminGap() && $bundle['organization_id'] != $userOrgId) {
+        jsonError('Sem permissao', 403);
+    }
+
+    Database::execute("DELETE FROM deploy_bundles WHERE id = ?", [$id]);
+    log_audit('DELETE', 'bundles', $id, []);
+    jsonSuccess(null, 'Bundle excluido');
+}
+
+function handleUpdateBundleDescription($input) {
+    $bundleId = (int)($input['id'] ?? 0);
+    $description = $input['description'] ?? '';
+    if (!$bundleId) jsonError('ID do bundle requerido');
+
+    $bundle = Database::fetchOne("SELECT id, organization_id FROM deploy_bundles WHERE id = ?", [$bundleId]);
+    if (!$bundle) jsonError('Bundle nao encontrado', 404);
+
+    $userOrgId = getUserOrgId();
+    if ($userOrgId !== null && !isAdminGap() && $bundle['organization_id'] != $userOrgId) {
+        jsonError('Sem permissao', 403);
+    }
+
+    Database::execute("UPDATE deploy_bundles SET description = ? WHERE id = ?", [$description, $bundleId]);
+    log_audit('UPDATE', 'bundles', $bundleId, ['description' => $description]);
+    jsonSuccess(null, 'Descricao atualizada');
 }
 
