@@ -1366,3 +1366,69 @@ td {
 .terminal .text-emerald-400 { color: #34d399; }
 .terminal .text-amber-400 { color: #fbbf24; }
 .terminal .text-slate-400 { color: #94a3b8; }
+
+/* ============ Drag-and-drop reorder scripts ============ */
+.reorder-list {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    max-height: 60vh;
+    overflow-y: auto;
+}
+.reorder-item {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 10px 14px;
+    background: var(--bg-secondary);
+    border: 1px solid var(--border-color);
+    border-radius: 6px;
+    cursor: grab;
+    transition: background 0.15s, border-color 0.15s, opacity 0.15s;
+    user-select: none;
+}
+.reorder-item:hover {
+    border-color: var(--accent);
+    background: var(--bg-tertiary);
+}
+.reorder-item.dragging {
+    opacity: 0.45;
+    cursor: grabbing;
+}
+.drag-handle {
+    color: var(--text-muted);
+    font-size: 1.1em;
+    flex-shrink: 0;
+}
+.order-number {
+    background: var(--accent);
+    color: #fff;
+    border-radius: 50%;
+    width: 28px;
+    height: 28px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-weight: 700;
+    font-size: 0.8em;
+    flex-shrink: 0;
+}
+.reorder-item .script-name {
+    flex: 1;
+    font-weight: 500;
+    color: var(--text-primary);
+}
+.reorder-item .script-filename {
+    font-size: 0.8em;
+    color: var(--text-muted);
+    font-family: monospace;
+}
+.script-badge {
+    padding: 2px 8px;
+    border-radius: 12px;
+    font-size: 0.75em;
+    font-weight: 600;
+    flex-shrink: 0;
+}
+.script-badge.core    { background: #fef3c7; color: #92400e; }
+.script-badge.custom  { background: #dbeafe; color: #1e40af; }

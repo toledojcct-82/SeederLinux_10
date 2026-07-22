@@ -330,7 +330,12 @@
                 <!-- Scripts Core View -->
                 <div id="view-scripts-core" class="hidden">
                     <div class="card">
-                        <div class="card-header"><h3 class="card-title">Scripts do Sistema</h3></div>
+                        <div class="card-header" style="display:flex;align-items:center;justify-content:space-between;">
+                            <h3 class="card-title">Scripts do Sistema</h3>
+                            <button id="btn-reorder-scripts" class="btn btn-secondary" onclick="showReorderModal()" style="display:none;">
+                                Reordenar Scripts
+                            </button>
+                        </div>
                         <div class="card-body" id="scripts-list"></div>
                     </div>
                 </div>
@@ -686,6 +691,25 @@
 
     <!-- Toast Container -->
     <div id="toast-container"></div>
+
+    <!-- Modal Reordenar Scripts -->
+    <div id="modal-reorder-scripts" class="modal hidden">
+        <div class="modal-backdrop" onclick="closeModal('modal-reorder-scripts')"></div>
+        <div class="modal-content modal-large">
+            <div class="modal-header">
+                <h3 class="modal-title">Reordenar Scripts (Ordem de Execucao)</h3>
+                <button class="modal-close" onclick="closeModal('modal-reorder-scripts')">&times;</button>
+            </div>
+            <div class="modal-body">
+                <p class="text-slate-400 text-sm mb-4">Arraste os itens para definir a ordem em que os scripts serao executados no bundle.</p>
+                <div id="reorder-script-list" class="reorder-list"></div>
+            </div>
+            <div class="modal-footer">
+                <button class="btn btn-secondary" onclick="resetScriptOrder()">Restaurar Padrao</button>
+                <button class="btn btn-primary" onclick="saveScriptOrder()">Salvar Ordem</button>
+            </div>
+        </div>
+    </div>
 
     <script src="assets/js/app.js"></script>
     <script src="assets/js/admin.js"></script>

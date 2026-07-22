@@ -108,6 +108,9 @@ function applyRolePermissions() {
         if (el) el.classList.toggle('hidden', role !== 'admin_gap');
     });
 
+    const reorderBtn = document.getElementById('btn-reorder-scripts');
+    if (reorderBtn) reorderBtn.style.display = role === 'admin_gap' ? '' : 'none';
+
     ['nav-audit'].forEach(id => {
         const el = document.getElementById(id);
         if (el) el.classList.toggle('hidden', role !== 'admin_gap' && role !== 'auditor');
@@ -1697,3 +1700,123 @@ function setupEventListeners() {
 }
 
 setupEventListeners();
+// ============ SCRIPT REORDER (DRAG AND DROP) ============
+
+let _dragSrcEl = null;
+
+function showReorderModal() {
+    fetch('/api/?action=scripts')
+        .then(r => r.json())
+        .then(data => {
+            if (!data.success) { Toast.error('Erro ao carregar scripts'); return; }
+            const core = (data.data || []).filter(s => s.is_core);
+            const list = document.getElementById('reorder-script-list');
+            list.innerHTML = '';
+            core.forEach(script => {
+                const item = document.createElement('div');
+                item.className = 'reorder-item';
+                item.draggable = true;
+                item.dataset.id = script.id;
+                item.innerHTML = `
+                    <span class="drag-handle">&#9776;</span>
+                    <span class="order-number">${script.execution_order}</span>
+                    <span class="script-name">${Utils.escapeHtml(script.name)}</span>
+                    <span class="script-filename">${Utils.escapeHtml(script.filename)}</span>
+                    <span class="script-badge core">Core</span>
+                `;
+                item.addEventListener('dragstart', _handleDragStart);
+                item.addEventListener('dragover', _handleDragOver);
+                item.addEventListener('drop', _handleDrop);
+                item.addEventListener('dragend', _handleDragEnd);
+                list.appendChild(item);
+            });
+            openModal('modal-reorder-scripts');
+        })
+        .catch(() => Toast.error('Erro de rede'));
+}
+window.showReorderModal = showReorderModal;
+
+function _handleDragStart(e) {
+    _dragSrcEl = this;
+    e.dataTransfer.effectAllowed = 'move';
+    this.classList.add('dragging');
+}
+
+function _handleDragOver(e) {
+    e.preventDefault();
+    e.dataTransfer.dropEffect = 'move';
+    return false;
+}
+
+function _handleDrop(e) {
+    e.stopPropagation();
+    if (_dragSrcEl && _dragSrcEl !== this) {
+        const parent = this.parentNode;
+        const children = [...parent.children];
+        const from = children.indexOf(_dragSrcEl);
+        const to = children.indexOf(this);
+        if (from < to) {
+            parent.insertBefore(_dragSrcEl, this.nextSibling);
+        } else {
+            parent.insertBefore(_dragSrcEl, this);
+        }
+        _updateOrderNumbers();
+    }
+    return false;
+}
+
+function _handleDragEnd() {
+    this.classList.remove('dragging');
+    _dragSrcEl = null;
+}
+
+function _updateOrderNumbers() {
+    document.querySelectorAll('#reorder-script-list .order-number').forEach((el, i) => {
+        el.textContent = i + 1;
+    });
+}
+
+function saveScriptOrder() {
+    const items = document.querySelectorAll('#reorder-script-list .reorder-item');
+    const scripts = Array.from(items).map((item, index) => ({
+        id: parseInt(item.dataset.id),
+        order: index + 1
+    }));
+    fetch('/api/?action=update-script-order', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
+        body: JSON.stringify({ scripts })
+    })
+    .then(r => r.json())
+    .then(data => {
+        if (data.success) {
+            Toast.success('Ordem salva com sucesso!');
+            closeModal('modal-reorder-scripts');
+            loadAllScripts();
+        } else {
+            Toast.error(data.error || 'Falha ao salvar');
+        }
+    })
+    .catch(() => Toast.error('Erro de rede'));
+}
+window.saveScriptOrder = saveScriptOrder;
+
+function resetScriptOrder() {
+    if (!confirm('Isso restaurara a ordem padrao dos scripts. Continuar?')) return;
+    fetch('/api/?action=reset-script-order', {
+        method: 'POST',
+        credentials: 'include'
+    })
+    .then(r => r.json())
+    .then(data => {
+        if (data.success) {
+            Toast.success('Ordem restaurada!');
+            showReorderModal();
+        } else {
+            Toast.error(data.error || 'Erro ao restaurar ordem');
+        }
+    })
+    .catch(() => Toast.error('Erro de rede'));
+}
+window.resetScriptOrder = resetScriptOrder;
